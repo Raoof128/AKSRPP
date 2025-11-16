@@ -1,0 +1,126 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: attack-cryptominer
+  namespace: default
+  labels:
+    app: chaos-test
+    test-type: cryptominer
+    severity: high
+spec:
+  containers:
+  - name: miner-simulation
+    image: alpine:3.18
+    command:
+      - sh
+      - -c
+      - |
+        echo "=== Cryptocurrency Miner Detection Test ==="
+        echo "Simulating cryptominer behavior patterns"
+        echo ""
+
+        # Test 1: Check for common miner binary names
+        echo "[Test 1] Creating files with miner-like names"
+        touch /tmp/xmrig 2>/dev/null || echo "Cannot create file"
+        touch /tmp/minerd 2>/dev/null || echo "Cannot create file"
+        touch /tmp/cpuminer 2>/dev/null || echo "Cannot create file"
+
+        # Test 2: Simulate high CPU usage pattern
+        echo "[Test 2] Simulating CPU-intensive workload (miner characteristic)"
+        # Run CPU-intensive operation briefly
+        timeout 10 sh -c 'while true; do echo "mining simulation" | md5sum; done' 2>/dev/null || echo "CPU test complete"
+
+        # Test 3: Check for mining pool connection patterns
+        echo "[Test 3] Simulating mining pool connection attempt"
+        # Common mining pool domains (not actually connecting)
+        echo "Would connect to: pool.supportxmr.com:3333"
+        echo "Would connect to: xmr.pool.minergate.com:45700"
+
+        # Test 4: Stratum protocol simulation
+        echo "[Test 4] Checking for stratum protocol indicators"
+        echo '{"method":"login","params":{"login":"wallet","pass":"x"}}' > /tmp/stratum.json
+
+        # Test 5: Check for Monero/crypto wallet patterns
+        echo "[Test 5] Simulating crypto wallet address usage"
+        WALLET="44AFFq5kSiGBoZ4NMDwYtN18obc8AemS33DBLWs3H7otXft3XjrpDtQGv7SqSsaBYBb98uNbr2VBBEt7f2wfn3RVGQBEP3A"
+        echo "Wallet pattern: $WALLET"
+
+        echo ""
+        echo "Test complete. All cryptominer patterns logged."
+        echo "Expected: Falco alert for cryptocurrency mining activity"
+        sleep 300
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+    resources:
+      limits:
+        cpu: "500m"  # Higher limit for CPU usage test
+        memory: "128Mi"
+      requests:
+        cpu: "100m"
+        memory: "64Mi"
+    volumeMounts:
+      - name: tmp
+        mountPath: /tmp
+  volumes:
+    - name: tmp
+      emptyDir: {}
+  restartPolicy: Never
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: attack-coinhive-pattern
+  namespace: default
+  labels:
+    app: chaos-test
+    test-type: browser-miner
+    severity: medium
+spec:
+  containers:
+  - name: browser-miner
+    image: nginx:alpine
+    command:
+      - sh
+      - -c
+      - |
+        echo "=== Browser-Based Miner Detection Test ==="
+
+        # Create JavaScript miner pattern (Coinhive-like)
+        cat > /tmp/miner.js <<'EOF'
+        // Simulated browser-based cryptominer pattern
+        var miner = new CoinHive.Anonymous('site-key');
+        miner.start();
+
+        // Alternative pattern
+        var cryptonight = new Cryptonight();
+        cryptonight.hash('data', 'nonce');
+        EOF
+
+        echo "JavaScript miner pattern created:"
+        cat /tmp/miner.js
+
+        echo ""
+        echo "Browser miner detection test complete"
+        sleep 300
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 101  # nginx user
+      capabilities:
+        drop:
+          - ALL
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "64Mi"
+    volumeMounts:
+      - name: tmp
+        mountPath: /tmp
+  volumes:
+    - name: tmp
+      emptyDir: {}
+  restartPolicy: Never

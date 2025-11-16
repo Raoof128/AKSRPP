@@ -1,0 +1,110 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: attack-privesc-sudo
+  namespace: default
+  labels:
+    app: chaos-test
+    test-type: privilege-escalation
+    severity: critical
+spec:
+  containers:
+  - name: attacker
+    image: ubuntu:22.04
+    command:
+      - bash
+      - -c
+      - |
+        echo "=== Privilege Escalation Simulation ==="
+        echo "WARNING: Simulating privilege escalation attempts"
+        echo ""
+
+        # Test 1: Attempt sudo usage (common privesc technique)
+        echo "[Test 1] Attempting sudo command"
+        command -v sudo && sudo -l 2>/dev/null || echo "sudo not available or failed"
+
+        # Test 2: Check for SUID binaries
+        echo "[Test 2] Searching for SUID binaries"
+        find / -perm -4000 -type f 2>/dev/null | head -10 || echo "Search blocked or no SUID bins"
+
+        # Test 3: Attempt to change user
+        echo "[Test 3] Attempting su command"
+        command -v su && su - root -c 'whoami' 2>/dev/null || echo "su failed (expected)"
+
+        # Test 4: Check capabilities
+        echo "[Test 4] Checking process capabilities"
+        grep Cap /proc/self/status 2>/dev/null || echo "Cannot read capabilities"
+
+        # Test 5: ServiceAccount token access
+        echo "[Test 5] Attempting ServiceAccount token access"
+        if [ -f /var/run/secrets/kubernetes.io/serviceaccount/token ]; then
+          echo "SA token found at default location"
+          cat /var/run/secrets/kubernetes.io/serviceaccount/token | head -c 20
+        else
+          echo "SA token not mounted (good)"
+        fi
+
+        # Keep pod alive
+        echo ""
+        echo "Test complete. Sleeping for forensics..."
+        sleep 300
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+    resources:
+      limits:
+        cpu: "200m"
+        memory: "128Mi"
+  automountServiceAccountToken: false
+  restartPolicy: Never
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: attack-privesc-capability
+  namespace: default
+  labels:
+    app: chaos-test
+    test-type: capability-abuse
+    severity: high
+spec:
+  containers:
+  - name: attacker
+    image: alpine:3.18
+    command:
+      - sh
+      - -c
+      - |
+        echo "=== Capability Abuse Test ==="
+
+        # Install debugging tools
+        apk add --no-cache libcap 2>/dev/null || echo "Cannot install packages"
+
+        # Check current capabilities
+        echo "Current capabilities:"
+        capsh --print 2>/dev/null || echo "capsh not available"
+
+        # Attempt to use potentially dangerous capabilities
+        echo "Attempting privileged network operations..."
+        nc -l -p 80 2>/dev/null &
+        PID=$!
+        sleep 2
+        kill $PID 2>/dev/null
+
+        echo "Test complete"
+        sleep 300
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      capabilities:
+        drop:
+          - ALL
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "64Mi"
+  restartPolicy: Never

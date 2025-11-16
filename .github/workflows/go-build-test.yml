@@ -1,0 +1,100 @@
+name: Go Build & Test
+
+on:
+  push:
+    branches: [ main, claude/** ]
+    paths:
+      - 'runtime-security/response-automation/operator/**'
+      - '.github/workflows/go-build-test.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'runtime-security/response-automation/operator/**'
+
+jobs:
+  build:
+    name: Build Go Binary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        working-directory: runtime-security/response-automation/operator
+        run: go mod download
+
+      - name: Build operator
+        working-directory: runtime-security/response-automation/operator
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -o bin/remediation-operator .
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: remediation-operator
+          path: runtime-security/response-automation/operator/bin/remediation-operator
+
+  test:
+    name: Go Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Run tests with coverage
+        working-directory: runtime-security/response-automation/operator
+        run: |
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Generate coverage report
+        working-directory: runtime-security/response-automation/operator
+        run: go tool cover -html=coverage.out -o coverage.html
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./runtime-security/response-automation/operator/coverage.out
+          flags: go-operator
+          name: operator-coverage
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v3
+        with:
+          name: go-coverage-report
+          path: runtime-security/response-automation/operator/coverage.html
+
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        working-directory: runtime-security/response-automation/operator
+        run: |
+          docker build -t remediation-operator:${{ github.sha }} .
+
+      - name: Test Docker image
+        run: |
+          docker run --rm remediation-operator:${{ github.sha }} --version || true

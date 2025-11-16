@@ -1,0 +1,110 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: attack-container-escape
+  namespace: default
+  labels:
+    app: chaos-test
+    test-type: container-escape
+    severity: critical
+spec:
+  containers:
+  - name: attacker
+    image: alpine:3.18
+    command:
+      - sh
+      - -c
+      - |
+        echo "=== Container Escape Simulation ==="
+        echo "WARNING: This pod simulates container breakout attempts"
+        echo "Expected: Falco alerts + automatic isolation"
+        echo ""
+
+        # Test 1: Attempt to access /proc filesystem (container escape technique)
+        echo "[Test 1] Accessing /proc/1/root (container escape indicator)"
+        ls -la /proc/1/root 2>/dev/null || echo "Blocked or not accessible"
+
+        # Test 2: Attempt cgroup access
+        echo "[Test 2] Accessing cgroup filesystem"
+        ls -la /sys/fs/cgroup 2>/dev/null || echo "Blocked"
+
+        # Test 3: Check for device access
+        echo "[Test 3] Checking for raw device access"
+        ls -la /dev/sd* 2>/dev/null || echo "No raw devices"
+
+        # Test 4: Check for Docker socket (common escape vector)
+        echo "[Test 4] Checking for Docker socket"
+        ls -la /var/run/docker.sock 2>/dev/null || echo "Docker socket not mounted (good)"
+
+        # Test 5: Attempt nsenter simulation
+        echo "[Test 5] Simulating nsenter command pattern"
+        command -v nsenter && echo "nsenter found!" || echo "nsenter not available"
+
+        # Keep pod alive for forensics
+        echo ""
+        echo "Test complete. Pod will remain running for 5 minutes for forensics collection."
+        sleep 300
+    securityContext:
+      # These would normally be blocked by OPA, but we're testing runtime detection
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 1000
+      capabilities:
+        drop:
+          - ALL
+      readOnlyRootFilesystem: true
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "64Mi"
+      requests:
+        cpu: "50m"
+        memory: "32Mi"
+    volumeMounts:
+      - name: tmp
+        mountPath: /tmp
+  volumes:
+    - name: tmp
+      emptyDir: {}
+  restartPolicy: Never
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: attack-proc-access
+  namespace: default
+  labels:
+    app: chaos-test
+    test-type: proc-filesystem
+    severity: critical
+spec:
+  containers:
+  - name: attacker
+    image: busybox:1.36
+    command:
+      - sh
+      - -c
+      - |
+        echo "=== /proc Filesystem Access Test ==="
+
+        # Attempt to read host process info
+        echo "Reading /proc/1/environ (host init process)"
+        cat /proc/1/environ 2>/dev/null | tr '\0' '\n' || echo "Blocked"
+
+        # Attempt to read cmdline
+        echo "Reading /proc/1/cmdline"
+        cat /proc/1/cmdline 2>/dev/null || echo "Blocked"
+
+        # Check mounts
+        echo "Reading /proc/mounts"
+        cat /proc/mounts 2>/dev/null | head -10
+
+        sleep 300
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "64Mi"
+  restartPolicy: Never

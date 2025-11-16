@@ -1,0 +1,140 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build binaries
+        working-directory: runtime-security/response-automation/operator
+        run: |
+          mkdir -p dist
+
+          # Linux AMD64
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v \
+            -ldflags="-X main.Version=${{ github.ref_name }}" \
+            -o dist/remediation-operator-linux-amd64 .
+
+          # Linux ARM64
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -v \
+            -ldflags="-X main.Version=${{ github.ref_name }}" \
+            -o dist/remediation-operator-linux-arm64 .
+
+          # Darwin AMD64
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -v \
+            -ldflags="-X main.Version=${{ github.ref_name }}" \
+            -o dist/remediation-operator-darwin-amd64 .
+
+          # Darwin ARM64
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -v \
+            -ldflags="-X main.Version=${{ github.ref_name }}" \
+            -o dist/remediation-operator-darwin-arm64 .
+
+      - name: Create checksums
+        working-directory: runtime-security/response-automation/operator/dist
+        run: |
+          sha256sum * > checksums.txt
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Extract changelog for this version from CHANGELOG.md
+          sed -n "/## \[${{ github.ref_name }}\]/,/## \[/p" CHANGELOG.md | head -n -1 > release-notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: release-notes.md
+          files: |
+            runtime-security/response-automation/operator/dist/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker-release:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/remediation-operator
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: runtime-security/response-automation/operator
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  helm-release:
+    name: Package Helm Charts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+
+      - name: Package charts
+        run: |
+          # Future: Package Helm charts when created
+          echo "Helm chart packaging placeholder"
+
+      - name: Create compliance reports
+        run: |
+          cd supply-chain/compliance-reporting
+          python3 generate-report.py
+
+      - name: Upload compliance reports
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            supply-chain/compliance-reporting/compliance-*.json
+            supply-chain/compliance-reporting/compliance-summary.html
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
