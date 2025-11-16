@@ -1,0 +1,60 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequireapparmor
+  annotations:
+    description: >-
+      Requires AppArmor profiles for containers. Provides mandatory access
+      control reducing attack surface via syscall restrictions.
+    severity: MEDIUM
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireAppArmor
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowedProfiles:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequireapparmor
+
+        violation[{"msg": msg}] {
+          metadata := get_metadata
+          not has_apparmor_annotation(metadata)
+          msg := "Pods must have AppArmor profile annotation (container.apparmor.security.beta.kubernetes.io/<container>)"
+        }
+
+        violation[{"msg": msg}] {
+          metadata := get_metadata
+          annotation := metadata.annotations[key]
+          startswith(key, "container.apparmor.security.beta.kubernetes.io/")
+          not is_allowed_profile(annotation)
+          msg := sprintf("AppArmor profile %v not allowed. Allowed profiles: %v",
+            [annotation, input.parameters.allowedProfiles])
+        }
+
+        has_apparmor_annotation(metadata) {
+          key := object.keys(metadata.annotations)[_]
+          startswith(key, "container.apparmor.security.beta.kubernetes.io/")
+        }
+
+        is_allowed_profile(profile) {
+          input.parameters.allowedProfiles[_] == profile
+        }
+
+        get_metadata = metadata {
+          input.review.kind.kind == "Pod"
+          metadata := input.review.object.metadata
+        }
+
+        get_metadata = metadata {
+          input.review.kind.kind in ["Deployment", "StatefulSet", "DaemonSet"]
+          metadata := input.review.object.spec.template.metadata
+        }

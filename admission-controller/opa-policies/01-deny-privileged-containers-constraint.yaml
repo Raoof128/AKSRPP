@@ -1,0 +1,22 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sDenyPrivilegedContainer
+metadata:
+  name: deny-privileged-containers
+  annotations:
+    description: "Block all privileged containers except CNI plugins"
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+    excludedNamespaces:
+      - kube-system
+      - gatekeeper-system
+  parameters:
+    exemptImages:
+      # CNI plugins may need privileged access
+      - "k8s.gcr.io/pause"
+      # Add other justified exceptions here with documentation

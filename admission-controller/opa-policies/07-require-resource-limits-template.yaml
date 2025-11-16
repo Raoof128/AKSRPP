@@ -1,0 +1,68 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequireresourcelimits
+  annotations:
+    description: >-
+      Requires CPU and memory limits for all containers. Prevents resource
+      exhaustion and noisy neighbor problems.
+    severity: MEDIUM
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireResourceLimits
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequireresources
+
+        violation[{"msg": msg}] {
+          container := get_containers[_]
+          not has_cpu_limit(container)
+          msg := sprintf("Container %v must specify resources.limits.cpu", [container.name])
+        }
+
+        violation[{"msg": msg}] {
+          container := get_containers[_]
+          not has_memory_limit(container)
+          msg := sprintf("Container %v must specify resources.limits.memory", [container.name])
+        }
+
+        violation[{"msg": msg}] {
+          container := get_containers[_]
+          not has_cpu_request(container)
+          msg := sprintf("Container %v must specify resources.requests.cpu", [container.name])
+        }
+
+        violation[{"msg": msg}] {
+          container := get_containers[_]
+          not has_memory_request(container)
+          msg := sprintf("Container %v must specify resources.requests.memory", [container.name])
+        }
+
+        has_cpu_limit(container) {
+          container.resources.limits.cpu
+        }
+
+        has_memory_limit(container) {
+          container.resources.limits.memory
+        }
+
+        has_cpu_request(container) {
+          container.resources.requests.cpu
+        }
+
+        has_memory_request(container) {
+          container.resources.requests.memory
+        }
+
+        get_containers[container] {
+          input.review.kind.kind == "Pod"
+          container := input.review.object.spec.containers[_]
+        }
+
+        get_containers[container] {
+          input.review.kind.kind in ["Deployment", "StatefulSet", "DaemonSet"]
+          container := input.review.object.spec.template.spec.containers[_]
+        }

@@ -1,0 +1,74 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequirerunasnonroot
+  annotations:
+    description: >-
+      Requires containers to run as non-root user. Running as root increases
+      attack surface and allows privilege escalation if container is compromised.
+    severity: HIGH
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireRunAsNonRoot
+      validation:
+        openAPIV3Schema:
+          type: object
+
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequirerunasnonroot
+
+        import future.keywords.contains
+        import future.keywords.if
+        import future.keywords.in
+
+        violation[{"msg": msg}] {
+          # Check Pod-level security context
+          input.review.kind.kind == "Pod"
+          not has_run_as_nonroot(input.review.object.spec)
+          msg := "Pods must run as non-root user (spec.securityContext.runAsNonRoot: true)"
+        }
+
+        violation[{"msg": msg}] {
+          # Check Deployment
+          input.review.kind.kind == "Deployment"
+          not has_run_as_nonroot(input.review.object.spec.template.spec)
+          msg := "Deployment pods must run as non-root user"
+        }
+
+        violation[{"msg": msg}] {
+          # Check StatefulSet
+          input.review.kind.kind == "StatefulSet"
+          not has_run_as_nonroot(input.review.object.spec.template.spec)
+          msg := "StatefulSet pods must run as non-root user"
+        }
+
+        violation[{"msg": msg}] {
+          # Check DaemonSet
+          input.review.kind.kind == "DaemonSet"
+          not has_run_as_nonroot(input.review.object.spec.template.spec)
+          msg := "DaemonSet pods must run as non-root user"
+        }
+
+        violation[{"msg": msg}] {
+          # Check individual container overrides
+          input.review.kind.kind == "Pod"
+          container := input.review.object.spec.containers[_]
+          has_explicit_root(container)
+          msg := sprintf("Container %v explicitly runs as root", [container.name])
+        }
+
+        has_run_as_nonroot(spec) {
+          spec.securityContext.runAsNonRoot == true
+        }
+
+        has_explicit_root(container) {
+          container.securityContext.runAsNonRoot == false
+        }
+
+        has_explicit_root(container) {
+          container.securityContext.runAsUser == 0
+        }

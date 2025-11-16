@@ -1,0 +1,10 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequireIngressHttps
+metadata:
+  name: require-ingress-https
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: ["networking.k8s.io"]
+        kinds: ["Ingress"]

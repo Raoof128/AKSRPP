@@ -1,0 +1,43 @@
+# TEST: Container running as root should FAIL
+# Expected: Admission denied by require-run-as-nonroot policy
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-root-fail
+  namespace: default
+  labels:
+    app: test
+    owner: security-team
+    environment: test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test
+  template:
+    metadata:
+      labels:
+        app: test
+        owner: security-team
+        environment: test
+    spec:
+      serviceAccountName: test-sa
+      automountServiceAccountToken: false
+      # VIOLATION: Missing runAsNonRoot or set to false
+      containers:
+      - name: nginx
+        image: docker.io/nginx:1.25.0
+        securityContext:
+          runAsUser: 0  # VIOLATION: Running as root
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "200m"
+            memory: "256Mi"

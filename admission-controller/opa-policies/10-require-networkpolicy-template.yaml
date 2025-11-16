@@ -1,0 +1,35 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequirenetworkpolicy
+  annotations:
+    description: >-
+      Requires all namespaces to have NetworkPolicy. Enforces zero-trust
+      network segmentation at pod level.
+    severity: HIGH
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireNetworkPolicy
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequirenetworkpolicy
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "Namespace"
+          namespace := input.review.object.metadata.name
+          not is_excluded_namespace(namespace)
+          not has_required_label(input.review.object)
+          msg := sprintf("Namespace %v must have label 'network-policy: enabled'", [namespace])
+        }
+
+        has_required_label(obj) {
+          obj.metadata.labels["network-policy"] == "enabled"
+        }
+
+        is_excluded_namespace(ns) {
+          excluded := ["kube-system", "kube-public", "kube-node-lease", "gatekeeper-system"]
+          excluded[_] == ns
+        }

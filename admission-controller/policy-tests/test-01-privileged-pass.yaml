@@ -1,0 +1,37 @@
+# TEST: Non-privileged container should PASS
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-nonpriv-pass
+  namespace: default
+  labels:
+    app: test
+    owner: security-team
+    environment: test
+spec:
+  serviceAccountName: test-sa
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: nginx
+    image: docker.io/nginx:1.25.0
+    securityContext:
+      privileged: false
+      runAsNonRoot: true
+      runAsUser: 1000
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"

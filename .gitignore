@@ -1,0 +1,76 @@
+# Kubernetes
+*.kubeconfig
+kubeconfig
+.kube/
+
+# Secrets and credentials
+*.key
+*.pem
+*.crt
+*.p12
+secrets/
+credentials.json
+.env
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+bin/
+build/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+vendor/
+*.test
+*.out
+go.work
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+*.egg-info/
+venv/
+.venv/
+
+# Logs
+*.log
+logs/
+
+# Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+
+# Helm
+charts/*.tgz
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# SBOM and scan results
+sbom-reports/
+scan-results/
+vulnerability-reports/
+
+# Evidence and forensics (local testing)
+forensics-local/
+evidence-local/

@@ -1,0 +1,11 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sBlockPodExec
+metadata:
+  name: block-pod-exec-production
+spec:
+  enforcementAction: dryrun  # Audit mode - change to 'deny' for production
+  parameters:
+    blockedNamespaces:
+      - production
+      - prod
+      - live

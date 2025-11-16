@@ -1,0 +1,48 @@
+# TEST: Image with :latest tag should FAIL
+# Expected: Admission denied by block-latest-tag policy
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-latest-tag-fail
+  namespace: default
+  labels:
+    app: test
+    owner: security-team
+    environment: test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test
+  template:
+    metadata:
+      labels:
+        app: test
+        owner: security-team
+        environment: test
+    spec:
+      serviceAccountName: test-sa
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: app
+        image: docker.io/nginx:latest  # VIOLATION: Using :latest tag
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "200m"
+            memory: "256Mi"

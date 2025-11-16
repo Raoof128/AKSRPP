@@ -1,0 +1,44 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequireingresshttps
+  annotations:
+    description: >-
+      Requires HTTPS/TLS for all Ingress resources. Ensures encrypted
+      communication for all external-facing services.
+    severity: HIGH
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireIngressHttps
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequireingresshttps
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "Ingress"
+          not has_tls_configured
+          msg := "Ingress must have TLS configured (spec.tls)"
+        }
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "Ingress"
+          not has_https_redirect_annotation
+          msg := "Ingress must have HTTPS redirect annotation"
+        }
+
+        has_tls_configured {
+          count(input.review.object.spec.tls) > 0
+        }
+
+        has_https_redirect_annotation {
+          annotations := input.review.object.metadata.annotations
+          annotations["nginx.ingress.kubernetes.io/ssl-redirect"] == "true"
+        }
+
+        has_https_redirect_annotation {
+          annotations := input.review.object.metadata.annotations
+          annotations["ingress.kubernetes.io/ssl-redirect"] == "true"
+        }

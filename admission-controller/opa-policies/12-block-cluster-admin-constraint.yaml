@@ -1,0 +1,16 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sBlockClusterAdmin
+metadata:
+  name: block-cluster-admin-binding
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: ["rbac.authorization.k8s.io"]
+        kinds: ["ClusterRoleBinding", "RoleBinding"]
+  parameters:
+    exemptSubjects:
+      # Allow specific service accounts for automation
+      - "ServiceAccount:admin-automation"
+      # Allow specific groups
+      - "Group:cluster-administrators"

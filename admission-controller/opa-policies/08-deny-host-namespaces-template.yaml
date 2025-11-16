@@ -1,0 +1,46 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdenyhostnamespaces
+  annotations:
+    description: >-
+      Blocks use of host namespaces (network, PID, IPC). Prevents container
+      escape and isolation bypass attacks.
+    severity: CRITICAL
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDenyHostNamespaces
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdenyhostnamespaces
+
+        violation[{"msg": msg}] {
+          spec := get_spec
+          spec.hostNetwork == true
+          msg := "Pods cannot use host network (hostNetwork: true)"
+        }
+
+        violation[{"msg": msg}] {
+          spec := get_spec
+          spec.hostPID == true
+          msg := "Pods cannot use host PID namespace (hostPID: true)"
+        }
+
+        violation[{"msg": msg}] {
+          spec := get_spec
+          spec.hostIPC == true
+          msg := "Pods cannot use host IPC namespace (hostIPC: true)"
+        }
+
+        get_spec = spec {
+          input.review.kind.kind == "Pod"
+          spec := input.review.object.spec
+        }
+
+        get_spec = spec {
+          input.review.kind.kind in ["Deployment", "StatefulSet", "DaemonSet"]
+          spec := input.review.object.spec.template.spec
+        }

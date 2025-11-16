@@ -1,0 +1,39 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sblockpodexec
+  annotations:
+    description: >-
+      Blocks exec into pods in production namespaces. Prevents unauthorized
+      access and ensures audit trail via bastion/jump hosts.
+    severity: HIGH
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sBlockPodExec
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            blockedNamespaces:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sblockpodexec
+
+        violation[{"msg": msg}] {
+          # Note: This requires enabling ValidatingAdmissionPolicy for pod/exec
+          input.review.kind.kind == "PodExecOptions"
+          namespace := input.review.namespace
+          is_blocked_namespace(namespace)
+          msg := sprintf("Exec into pods in namespace %v is not allowed. Use bastion host.", [namespace])
+        }
+
+        is_blocked_namespace(ns) {
+          blocked := input.parameters.blockedNamespaces[_]
+          ns == blocked
+        }

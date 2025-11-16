@@ -1,0 +1,53 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdenyhostpath
+  annotations:
+    description: >-
+      Blocks hostPath volume mounts. Prevents access to host filesystem
+      which can lead to container escapes and privilege escalation.
+    severity: CRITICAL
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDenyHostPath
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowedHostPaths:
+              type: array
+              items:
+                type: object
+                properties:
+                  pathPrefix:
+                    type: string
+                  readOnly:
+                    type: boolean
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdenyhostpath
+
+        violation[{"msg": msg}] {
+          volume := get_volumes[_]
+          volume.hostPath
+          not is_allowed_hostpath(volume.hostPath.path)
+          msg := sprintf("hostPath volume is not allowed: %v", [volume.name])
+        }
+
+        is_allowed_hostpath(path) {
+          allowed := input.parameters.allowedHostPaths[_]
+          startswith(path, allowed.pathPrefix)
+        }
+
+        get_volumes[volume] {
+          input.review.kind.kind == "Pod"
+          volume := input.review.object.spec.volumes[_]
+        }
+
+        get_volumes[volume] {
+          input.review.kind.kind in ["Deployment", "StatefulSet", "DaemonSet"]
+          volume := input.review.object.spec.template.spec.volumes[_]
+        }

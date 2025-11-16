@@ -1,0 +1,85 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdenypriviledgedcontainer
+  annotations:
+    description: >-
+      Prohibits privileged containers. Privileged containers can access host
+      resources and break container isolation, enabling privilege escalation
+      and container escape attacks.
+    severity: CRITICAL
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDenyPrivilegedContainer
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            exemptImages:
+              description: >-
+                Container images exempt from this policy (e.g., CNI plugins).
+                Use sparingly and document justification.
+              type: array
+              items:
+                type: string
+
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdenypriv
+
+        import future.keywords.contains
+        import future.keywords.if
+        import future.keywords.in
+
+        violation[{"msg": msg, "details": {}}] {
+          # Check Pods
+          input.review.kind.kind == "Pod"
+          container := input.review.object.spec.containers[_]
+          container.securityContext.privileged == true
+          not is_exempt(container.image)
+          msg := sprintf("Privileged container is not allowed: %v", [container.name])
+        }
+
+        violation[{"msg": msg, "details": {}}] {
+          # Check Pod init containers
+          input.review.kind.kind == "Pod"
+          container := input.review.object.spec.initContainers[_]
+          container.securityContext.privileged == true
+          not is_exempt(container.image)
+          msg := sprintf("Privileged init container is not allowed: %v", [container.name])
+        }
+
+        violation[{"msg": msg, "details": {}}] {
+          # Check Deployments
+          input.review.kind.kind == "Deployment"
+          container := input.review.object.spec.template.spec.containers[_]
+          container.securityContext.privileged == true
+          not is_exempt(container.image)
+          msg := sprintf("Privileged container is not allowed: %v", [container.name])
+        }
+
+        violation[{"msg": msg, "details": {}}] {
+          # Check StatefulSets
+          input.review.kind.kind == "StatefulSet"
+          container := input.review.object.spec.template.spec.containers[_]
+          container.securityContext.privileged == true
+          not is_exempt(container.image)
+          msg := sprintf("Privileged container is not allowed: %v", [container.name])
+        }
+
+        violation[{"msg": msg, "details": {}}] {
+          # Check DaemonSets
+          input.review.kind.kind == "DaemonSet"
+          container := input.review.object.spec.template.spec.containers[_]
+          container.securityContext.privileged == true
+          not is_exempt(container.image)
+          msg := sprintf("Privileged container is not allowed: %v", [container.name])
+        }
+
+        is_exempt(image) {
+          exempt_image := input.parameters.exemptImages[_]
+          startswith(image, exempt_image)
+        }

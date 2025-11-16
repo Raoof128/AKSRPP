@@ -1,0 +1,19 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequireAppArmor
+metadata:
+  name: require-apparmor-profile
+spec:
+  enforcementAction: dryrun  # Set to 'deny' once AppArmor is configured
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+    excludedNamespaces:
+      - kube-system
+      - gatekeeper-system
+  parameters:
+    allowedProfiles:
+      - "runtime/default"
+      - "localhost/k8s-apparmor-profile"

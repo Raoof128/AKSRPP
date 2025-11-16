@@ -1,0 +1,118 @@
+# TEST: Comprehensive secure deployment should PASS all policies
+# This deployment follows ALL security best practices
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secure-app-pass
+  namespace: default
+  labels:
+    app: secure-app
+    owner: security-team
+    environment: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: secure-app
+  template:
+    metadata:
+      labels:
+        app: secure-app
+        owner: security-team
+        environment: production
+    spec:
+      # Service account (not default)
+      serviceAccountName: secure-app-sa
+      automountServiceAccountToken: false
+
+      # Pod-level security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 2000
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+      - name: app
+        # Approved registry with explicit version tag
+        image: gcr.io/my-company/secure-app:v1.2.3
+
+        # Container security context
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+
+        # Resource limits and requests
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+
+        # Application port (not hostPort)
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+
+        # Probes
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+        # Volumes (emptyDir and configMap only, no hostPath)
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: config
+          mountPath: /config
+          readOnly: true
+
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: config
+        configMap:
+          name: app-config
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: secure-app-sa
+  namespace: default
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: secure-app
+  namespace: default
+  labels:
+    app: secure-app
+    owner: security-team
+    environment: production
+spec:
+  type: ClusterIP  # Not NodePort
+  selector:
+    app: secure-app
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP

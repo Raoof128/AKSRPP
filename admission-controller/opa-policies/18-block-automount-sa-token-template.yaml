@@ -1,0 +1,38 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sblockautomounttoken
+  annotations:
+    description: >-
+      Blocks automatic mounting of ServiceAccount tokens. Prevents unnecessary
+      API access from compromised containers.
+    severity: MEDIUM
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sBlockAutomountToken
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sblockautomount
+
+        violation[{"msg": msg}] {
+          spec := get_spec
+          not explicitly_disabled(spec)
+          msg := "Pods must set automountServiceAccountToken: false unless explicitly required"
+        }
+
+        explicitly_disabled(spec) {
+          spec.automountServiceAccountToken == false
+        }
+
+        get_spec = spec {
+          input.review.kind.kind == "Pod"
+          spec := input.review.object.spec
+        }
+
+        get_spec = spec {
+          input.review.kind.kind in ["Deployment", "StatefulSet", "DaemonSet"]
+          spec := input.review.object.spec.template.spec
+        }

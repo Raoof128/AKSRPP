@@ -1,0 +1,36 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdenyhostports
+  annotations:
+    description: >-
+      Blocks hostPort usage. Prevents port conflicts on nodes and reduces
+      exposure of container services to host network.
+    severity: MEDIUM
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDenyHostPorts
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdenyhostports
+
+        violation[{"msg": msg}] {
+          container := get_containers[_]
+          port := container.ports[_]
+          port.hostPort
+          msg := sprintf("Container %v uses hostPort %v which is not allowed",
+            [container.name, port.hostPort])
+        }
+
+        get_containers[container] {
+          input.review.kind.kind == "Pod"
+          container := input.review.object.spec.containers[_]
+        }
+
+        get_containers[container] {
+          input.review.kind.kind in ["Deployment", "StatefulSet", "DaemonSet"]
+          container := input.review.object.spec.template.spec.containers[_]
+        }

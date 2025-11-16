@@ -1,0 +1,20 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sDenyHostPath
+metadata:
+  name: deny-host-path
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+    excludedNamespaces:
+      - kube-system
+      - gatekeeper-system
+  parameters:
+    allowedHostPaths: []
+    # Example if you need to allow specific paths:
+    # - pathPrefix: "/var/lib/kubelet"
+    #   readOnly: true

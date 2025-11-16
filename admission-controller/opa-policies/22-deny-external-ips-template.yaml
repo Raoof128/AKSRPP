@@ -1,0 +1,24 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdenyexternalips
+  annotations:
+    description: >-
+      Blocks external IPs in Services. Prevents unauthorized external access
+      bypassing load balancers and network policies.
+    severity: HIGH
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDenyExternalIPs
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdenyexternalips
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "Service"
+          count(input.review.object.spec.externalIPs) > 0
+          msg := "Services cannot specify externalIPs. Use LoadBalancer or Ingress."
+        }

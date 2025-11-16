@@ -1,0 +1,31 @@
+# TEST: Container without resource limits should FAIL
+# Expected: Admission denied by require-resource-limits policy
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-no-limits-fail
+  namespace: default
+  labels:
+    app: test
+    owner: security-team
+    environment: test
+spec:
+  serviceAccountName: test-sa
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: docker.io/nginx:1.25.0
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+    # VIOLATION: Missing resources.limits and resources.requests

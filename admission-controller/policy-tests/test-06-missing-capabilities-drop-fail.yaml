@@ -1,0 +1,38 @@
+# TEST: Container not dropping ALL capabilities should FAIL
+# Expected: Admission denied by drop-all-capabilities policy
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-capabilities-fail
+  namespace: default
+  labels:
+    app: test
+    owner: security-team
+    environment: test
+spec:
+  serviceAccountName: test-sa
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: docker.io/nginx:1.25.0
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      # VIOLATION: Not dropping ALL capabilities
+      capabilities:
+        drop:
+          - NET_RAW
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"

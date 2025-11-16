@@ -1,0 +1,24 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sblocknodeport
+  annotations:
+    description: >-
+      Blocks NodePort services. Prevents exposing services on all cluster
+      nodes, reducing attack surface. Use LoadBalancer or Ingress instead.
+    severity: MEDIUM
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sBlockNodePort
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sblocknodeport
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "Service"
+          input.review.object.spec.type == "NodePort"
+          msg := "NodePort services are not allowed. Use LoadBalancer or Ingress instead."
+        }

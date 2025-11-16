@@ -1,0 +1,50 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sblockclusteradmin
+  annotations:
+    description: >-
+      Restricts cluster-admin role binding. Prevents privilege escalation
+      by limiting who can create cluster-admin RoleBindings.
+    severity: CRITICAL
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sBlockClusterAdmin
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            exemptSubjects:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sblockclusteradmin
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "ClusterRoleBinding"
+          input.review.object.roleRef.name == "cluster-admin"
+          subject := input.review.object.subjects[_]
+          not is_exempt_subject(subject)
+          msg := sprintf("Creating cluster-admin ClusterRoleBinding for %v/%v is not allowed",
+            [subject.kind, subject.name])
+        }
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "RoleBinding"
+          input.review.object.roleRef.name == "cluster-admin"
+          subject := input.review.object.subjects[_]
+          not is_exempt_subject(subject)
+          msg := sprintf("Creating cluster-admin RoleBinding for %v/%v is not allowed",
+            [subject.kind, subject.name])
+        }
+
+        is_exempt_subject(subject) {
+          exempt := input.parameters.exemptSubjects[_]
+          subject_identifier := sprintf("%v:%v", [subject.kind, subject.name])
+          subject_identifier == exempt
+        }

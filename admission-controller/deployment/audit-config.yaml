@@ -1,0 +1,78 @@
+# OPA Gatekeeper Audit Configuration
+# Enables comprehensive logging of policy violations for SIEM integration
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gatekeeper-audit-config
+  namespace: gatekeeper-system
+data:
+  # Audit interval in seconds (how often to scan existing resources)
+  audit-interval: "60"
+
+  # Constraint violation limit (max violations to report per constraint)
+  constraint-violation-limit: "100"
+
+  # Emit audit events for violations
+  emit-audit-events: "true"
+
+  # Audit from cache (performance optimization)
+  audit-from-cache: "true"
+
+  # Log level (DEBUG, INFO, ERROR)
+  log-level: "INFO"
+
+  # Log mutations (for mutating webhooks)
+  log-mutations: "true"
+
+  # Log denies (admission denials)
+  log-denies: "true"
+
+---
+# Prometheus ServiceMonitor for metrics collection
+apiVersion: v1
+kind: Service
+metadata:
+  name: gatekeeper-audit-metrics
+  namespace: gatekeeper-system
+  labels:
+    app: gatekeeper
+    component: audit
+spec:
+  selector:
+    app: gatekeeper
+  ports:
+  - name: metrics
+    port: 8888
+    targetPort: 8888
+    protocol: TCP
+
+---
+# Export audit logs to stdout in JSON format for log aggregation
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gatekeeper-log-format
+  namespace: gatekeeper-system
+data:
+  # JSON logging for structured log parsing
+  format: json
+
+  # Fields to include in logs
+  fields: |
+    {
+      "timestamp": true,
+      "level": true,
+      "msg": true,
+      "caller": true,
+      "constraint": true,
+      "constraint_kind": true,
+      "constraint_name": true,
+      "constraint_namespace": true,
+      "constraint_action": true,
+      "resource_kind": true,
+      "resource_name": true,
+      "resource_namespace": true,
+      "violation_message": true,
+      "violation_enforcement": true
+    }

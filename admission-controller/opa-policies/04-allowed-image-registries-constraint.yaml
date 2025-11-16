@@ -1,0 +1,28 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sAllowedRegistries
+metadata:
+  name: allowed-image-registries
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+      - apiGroups: ["batch"]
+        kinds: ["Job", "CronJob"]
+    excludedNamespaces:
+      - kube-system
+      - gatekeeper-system
+  parameters:
+    allowedRegistries:
+      # Approved corporate registries
+      - "docker.io/"
+      - "gcr.io/"
+      - "ghcr.io/"
+      - "quay.io/"
+      # Private registry (update with your organization's registry)
+      - "registry.company.internal/"
+      # AWS ECR example
+      - "123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/"

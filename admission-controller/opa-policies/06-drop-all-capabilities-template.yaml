@@ -1,0 +1,57 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdropallcapabilities
+  annotations:
+    description: >-
+      Requires containers to drop ALL Linux capabilities and only add specific
+      required ones. Implements principle of least privilege for process capabilities.
+    severity: HIGH
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDropAllCapabilities
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowedCapabilities:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdropallcaps
+
+        violation[{"msg": msg}] {
+          container := get_containers[_]
+          not drops_all_capabilities(container)
+          msg := sprintf("Container %v must drop ALL capabilities (drop: [ALL])", [container.name])
+        }
+
+        violation[{"msg": msg}] {
+          container := get_containers[_]
+          added_cap := container.securityContext.capabilities.add[_]
+          not allowed_capability(added_cap)
+          msg := sprintf("Container %v adds disallowed capability: %v", [container.name, added_cap])
+        }
+
+        drops_all_capabilities(container) {
+          container.securityContext.capabilities.drop[_] == "ALL"
+        }
+
+        allowed_capability(cap) {
+          input.parameters.allowedCapabilities[_] == cap
+        }
+
+        get_containers[container] {
+          input.review.kind.kind == "Pod"
+          container := input.review.object.spec.containers[_]
+        }
+
+        get_containers[container] {
+          input.review.kind.kind in ["Deployment", "StatefulSet", "DaemonSet"]
+          container := input.review.object.spec.template.spec.containers[_]
+        }

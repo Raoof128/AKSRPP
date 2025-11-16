@@ -1,0 +1,52 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequireseccomp
+  annotations:
+    description: >-
+      Requires seccomp profile for all pods. Seccomp restricts syscalls
+      available to containers, reducing kernel attack surface.
+    severity: HIGH
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireSeccomp
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowedProfiles:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequireseccomp
+
+        violation[{"msg": msg}] {
+          spec := get_spec
+          not has_valid_seccomp(spec)
+          msg := "Pod must specify seccomp profile (RuntimeDefault or Localhost)"
+        }
+
+        has_valid_seccomp(spec) {
+          profile := spec.securityContext.seccompProfile.type
+          is_allowed_profile(profile)
+        }
+
+        is_allowed_profile(profile) {
+          allowed := input.parameters.allowedProfiles[_]
+          profile == allowed
+        }
+
+        get_spec = spec {
+          input.review.kind.kind == "Pod"
+          spec := input.review.object.spec
+        }
+
+        get_spec = spec {
+          input.review.kind.kind in ["Deployment", "StatefulSet", "DaemonSet"]
+          spec := input.review.object.spec.template.spec
+        }

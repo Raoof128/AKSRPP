@@ -1,0 +1,128 @@
+# OPA Gatekeeper Helm Chart Values
+# Production-grade configuration for policy enforcement
+
+# Replica configuration for high availability
+replicas: 3
+
+# Audit configuration
+audit:
+  # Enable audit logging for all policy evaluations
+  enabled: true
+  # Audit interval (check existing resources)
+  interval: 60
+  # Log level: INFO, DEBUG, ERROR
+  logLevel: INFO
+  # Audit results write to audit constraint status
+  writeToRAMDisk: true
+  # Audit from cache for performance
+  auditFromCache: true
+
+# Webhook failure policy
+# "Fail" = deny by default (recommended for security)
+# "Ignore" = allow by default (use only for testing)
+validatingWebhookFailurePolicy: Fail
+validatingWebhookTimeoutSeconds: 5
+
+# Mutation webhook (for auto-remediation)
+mutatingWebhookFailurePolicy: Fail
+mutatingWebhookTimeoutSeconds: 3
+
+# Webhook annotations for monitoring
+webhookAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8888"
+
+# Resource limits for Gatekeeper pods
+resources:
+  limits:
+    cpu: "1000m"
+    memory: "512Mi"
+  requests:
+    cpu: "100m"
+    memory: "256Mi"
+
+# Metrics and monitoring
+metricsEnabled: true
+metricsPort: 8888
+
+# Log configuration
+logLevel: INFO
+logMutations: true
+logDenies: true
+
+# Constraint violation limit (how many violations to report)
+constraintViolationsLimit: 20
+
+# Experimental features
+enableExternalData: false
+enableGeneratorResourceExpansion: true
+
+# Image configuration (use latest stable)
+image:
+  repository: openpolicyagent/gatekeeper
+  release: v3.15.0
+  pullPolicy: IfNotPresent
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+
+# Node selector (optional - for dedicated security nodes)
+nodeSelector: {}
+  # security-tier: enforcement
+
+# Tolerations (optional)
+tolerations: []
+
+# Affinity rules (spread across nodes)
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - gatekeeper
+          topologyKey: kubernetes.io/hostname
+
+# Disable default policies (we'll use custom ones)
+disabledBuiltins: []
+
+# Namespace exclusions (Gatekeeper won't validate these)
+exemptNamespaces:
+  - kube-system
+  - kube-public
+  - kube-node-lease
+  - gatekeeper-system
+
+# Enable deletion operations validation
+validatingWebhookCheckIgnoreFailurePolicy: Fail
+
+# Readiness probe
+readiness:
+  enabled: true
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  failureThreshold: 3
+
+# Liveness probe
+liveness:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  failureThreshold: 3

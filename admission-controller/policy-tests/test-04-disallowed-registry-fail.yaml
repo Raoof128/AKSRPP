@@ -1,0 +1,37 @@
+# TEST: Image from disallowed registry should FAIL
+# Expected: Admission denied by allowed-image-registries policy
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-bad-registry-fail
+  namespace: default
+  labels:
+    app: test
+    owner: security-team
+    environment: test
+spec:
+  serviceAccountName: test-sa
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: suspicious
+    image: malicious-registry.example.com/backdoor:latest  # VIOLATION: Disallowed registry
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
