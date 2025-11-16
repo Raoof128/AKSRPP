@@ -179,7 +179,7 @@ AKSRPP/
 └── README.md                      # This file
 ```
 
-**Total**: 95+ files | ~6,000 lines of code | 5,000+ words documentation
+**Total**: 90 files | 7,252 lines (4,500 code + 2,700 docs) | Verified metrics
 
 ---
 
