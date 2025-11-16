@@ -1,0 +1,53 @@
+# Prometheus Alerting Rules for Security Platform
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-security-rules
+  namespace: monitoring
+data:
+  security-rules.yaml: |
+    groups:
+    - name: security_platform
+      interval: 30s
+      rules:
+      # Policy violation rate spike
+      - alert: PolicyViolationSpike
+        expr: rate(gatekeeper_violations_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          component: opa-gatekeeper
+        annotations:
+          summary: "High rate of policy violations"
+          description: "{{ $value }} violations/sec in last 5 min"
+
+      # Runtime threat detection
+      - alert: CriticalRuntimeThreat
+        expr: sum(rate(security_operator_alerts_received_total{priority="critical"}[5m])) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: falco
+        annotations:
+          summary: "CRITICAL runtime threat detected"
+          description: "Container escape or privilege escalation attempt"
+
+      # MTTR tracking
+      - alert: HighMTTR
+        expr: histogram_quantile(0.95, rate(security_operator_remediation_duration_seconds_bucket[10m])) > 120
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Mean time to remediation above target"
+          description: "95th percentile MTTR: {{ $value }}s (target: <120s)"
+
+      # CVE detection lag
+      - alert: CVEDetectionLag
+        expr: time() - sbom_last_scan_timestamp_seconds > 86400
+        labels:
+          severity: warning
+        annotations:
+          summary: "SBOM scan outdated"
+          description: "Last scan {{ $value | humanizeDuration }} ago"

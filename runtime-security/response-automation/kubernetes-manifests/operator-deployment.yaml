@@ -1,0 +1,208 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: security-operator
+  namespace: security
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: security-operator
+rules:
+  # Read pods
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+
+  # Read pod logs
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+
+  # Create NetworkPolicies for isolation
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["create", "get", "update", "delete"]
+
+  # Read namespaces
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: security-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: security-operator
+subjects:
+  - kind: ServiceAccount
+    name: security-operator
+    namespace: security
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-operator-config
+  namespace: security
+data:
+  config.yaml: |
+    # Remediation thresholds
+    critical_response:
+      isolate: true
+      capture_forensics: true
+      alert_pagerduty: true
+
+    warning_response:
+      monitor: true
+      capture_forensics: true
+      alert_slack: true
+
+    # Forensics retention
+    forensics_retention_days: 90
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: security-operator
+  namespace: security
+  labels:
+    app: security-operator
+    component: remediation
+spec:
+  replicas: 2  # HA for critical security component
+  selector:
+    matchLabels:
+      app: security-operator
+  template:
+    metadata:
+      labels:
+        app: security-operator
+        component: remediation
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: security-operator
+
+      # Security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+      - name: operator
+        image: security-operator:latest
+        imagePullPolicy: Always
+
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+
+        env:
+        - name: PORT
+          value: "8080"
+        - name: SLACK_WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: alert-secrets
+              key: slack-webhook-url
+              optional: true
+        - name: PAGERDUTY_INTEGRATION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: alert-secrets
+              key: pagerduty-integration-key
+              optional: true
+
+        # Security context (container-level)
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+              - ALL
+
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+        volumeMounts:
+        - name: config
+          mountPath: /config
+          readOnly: true
+        - name: forensics
+          mountPath: /forensics
+
+      volumes:
+      - name: config
+        configMap:
+          name: security-operator-config
+      - name: forensics
+        emptyDir: {}
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: security-operator
+              topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: security-operator
+  namespace: security
+  labels:
+    app: security-operator
+spec:
+  selector:
+    app: security-operator
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  type: ClusterIP
+---
+# Secret template (create with actual values)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: alert-secrets
+  namespace: security
+type: Opaque
+stringData:
+  slack-webhook-url: ""  # Set to your Slack webhook URL
+  pagerduty-integration-key: ""  # Set to your PagerDuty integration key

@@ -1,0 +1,167 @@
+# Custom Falco Rules: Reverse Shell & C2 Detection
+# Detects reverse shells and command & control communication
+
+- rule: Netcat Reverse Shell
+  desc: Detects netcat being used for reverse shell
+  condition: >
+    spawned_process and container and
+    ((proc.name = "nc" and (proc.args contains "-e" or proc.args contains "-c")) or
+     (proc.name = "ncat" and (proc.args contains "-e" or proc.args contains "--sh-exec")) or
+     (proc.name = "netcat" and proc.args contains "-e"))
+  output: >
+    Netcat reverse shell detected
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: CRITICAL
+  tags: [reverse_shell, command_and_control]
+
+- rule: Bash Reverse Shell
+  desc: Detects bash reverse shell patterns
+  condition: >
+    spawned_process and container and
+    proc.name in (bash, sh, dash, zsh) and
+    (proc.cmdline contains "/dev/tcp/" or
+     proc.cmdline contains "/dev/udp/" or
+     proc.cmdline contains "exec 5<>" or
+     proc.cmdline contains "exec 3<>")
+  output: >
+    Bash-based reverse shell detected
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: CRITICAL
+  tags: [reverse_shell, bash]
+
+- rule: Python Reverse Shell
+  desc: Detects Python-based reverse shells
+  condition: >
+    spawned_process and container and
+    (proc.name in (python, python2, python3) or proc.exepath contains "python") and
+    (proc.cmdline contains "socket.socket" or
+     proc.cmdline contains "subprocess.call" or
+     proc.cmdline contains "pty.spawn")
+  output: >
+    Python reverse shell detected
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: CRITICAL
+  tags: [reverse_shell, python]
+
+- rule: Perl Reverse Shell
+  desc: Detects Perl-based reverse shells
+  condition: >
+    spawned_process and container and
+    proc.name in (perl, perl5) and
+    (proc.cmdline contains "socket(" or
+     proc.cmdline contains "IO::Socket::INET")
+  output: >
+    Perl reverse shell detected
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: CRITICAL
+  tags: [reverse_shell, perl]
+
+- rule: Socat Reverse Shell
+  desc: Detects socat being used for reverse shell or port forwarding
+  condition: >
+    spawned_process and container and
+    proc.name = "socat" and
+    (proc.args contains "EXEC" or proc.args contains "SYSTEM")
+  output: >
+    Socat reverse shell or port forwarding detected
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: CRITICAL
+  tags: [reverse_shell, port_forwarding]
+
+- rule: SSH Tunnel Creation
+  desc: Detects SSH tunneling which may indicate lateral movement or C2
+  condition: >
+    spawned_process and container and
+    proc.name = "ssh" and
+    (proc.args contains "-D" or  # SOCKS proxy
+     proc.args contains "-L" or  # Local port forwarding
+     proc.args contains "-R")    # Remote port forwarding
+  output: >
+    SSH tunnel created from container
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: WARNING
+  tags: [command_and_control, lateral_movement]
+
+- rule: Suspicious Outbound Connection
+  desc: Detects containers connecting to unusual ports (common C2)
+  condition: >
+    outbound and container and
+    (fd.sport in (1337, 31337, 8888, 4444, 5555, 6666, 7777, 9999))
+  output: >
+    Container making connection to suspicious port
+    (user=%user.name container=%container.name
+     connection=%fd.name port=%fd.sport process=%proc.name pid=%proc.pid)
+  priority: WARNING
+  tags: [command_and_control, network]
+
+- rule: DNS Tunneling Detected
+  desc: Detects potential DNS tunneling (excessive DNS queries)
+  condition: >
+    spawned_process and container and
+    (proc.name in (dig, nslookup, host) or
+     (proc.name = "python" and proc.cmdline contains "dnslib"))
+  output: >
+    Potential DNS tunneling activity
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: WARNING
+  tags: [command_and_control, exfiltration]
+
+- rule: Cryptominer Detected
+  desc: Detects cryptocurrency miners
+  condition: >
+    spawned_process and container and
+    (proc.name in (xmrig, minergate, cpuminer, minerd) or
+     proc.cmdline contains "stratum+tcp" or
+     proc.cmdline contains "cryptonight" or
+     proc.cmdline contains "--donate-level")
+  output: >
+    Cryptocurrency miner detected in container
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: CRITICAL
+  tags: [cryptominer, resource_hijacking]
+
+- rule: Curl Download and Execute
+  desc: Detects downloading and executing scripts (common attack pattern)
+  condition: >
+    spawned_process and container and
+    ((proc.name in (curl, wget) and proc.args contains "|") or
+     (proc.name in (bash, sh) and proc.cmdline contains "curl" and proc.cmdline contains "|"))
+  output: >
+    Download and execute pattern detected
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: WARNING
+  tags: [execution, initial_access]
+
+- rule: Webshell Activity
+  desc: Detects web shells or command execution via web servers
+  condition: >
+    spawned_process and container and
+    proc.pname in (apache2, httpd, nginx, php-fpm, tomcat) and
+    proc.name in (bash, sh, cmd, powershell, wget, curl, nc, netcat)
+  output: >
+    Webshell-like activity detected
+    (user=%user.name container=%container.name parent=%proc.pname
+     command=%proc.cmdline pid=%proc.pid)
+  priority: CRITICAL
+  tags: [webshell, persistence]
+
+- rule: Suspicious Network Tool Usage
+  desc: Detects network reconnaissance tools
+  condition: >
+    spawned_process and container and
+    proc.name in (nmap, masscan, zmap, hping3, tcpdump, tshark, wireshark)
+  output: >
+    Network reconnaissance tool detected
+    (user=%user.name container=%container.name
+     tool=%proc.name command=%proc.cmdline pid=%proc.pid)
+  priority: WARNING
+  tags: [discovery, network_scanning]

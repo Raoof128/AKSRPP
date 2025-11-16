@@ -1,0 +1,44 @@
+# Cilium CNI Helm Values
+# eBPF-powered zero-trust networking
+
+# eBPF datapath
+bpf:
+  masquerade: true
+  hostRouting: true
+
+# Enable Hubble for observability
+hubble:
+  enabled: true
+  metrics:
+    enabled:
+      - dns
+      - drop
+      - tcp
+      - flow
+      - port-distribution
+      - icmp
+      - http
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+
+# Network Policy enforcement
+policyEnforcementMode: "default"  # default-deny for unlabeled pods
+
+# Monitor aggregation
+monitor:
+  enabled: true
+
+# IPv4/IPv6
+ipam:
+  mode: kubernetes
+
+# Operator
+operator:
+  replicas: 2
+
+# Security
+encryption:
+  enabled: false  # Enable for data-in-transit encryption
+  type: wireguard

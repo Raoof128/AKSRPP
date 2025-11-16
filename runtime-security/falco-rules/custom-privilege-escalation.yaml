@@ -1,0 +1,136 @@
+# Custom Falco Rules: Privilege Escalation Detection
+# Detects various privilege escalation techniques
+
+- rule: Sudo Execution in Container
+  desc: Detects sudo usage inside containers (unusual in containerized environments)
+  condition: >
+    spawned_process and container and
+    proc.name = "sudo"
+  output: >
+    Sudo executed in container (privilege escalation attempt)
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: WARNING
+  tags: [privilege_escalation, sudo]
+
+- rule: SUID Binary Execution
+  desc: Detects execution of SUID binaries in containers
+  condition: >
+    spawned_process and container and
+    (proc.name in (su, passwd, chsh, chfn, newgrp, gpasswd) or
+     proc.exepath contains "suid")
+  output: >
+    SUID binary execution in container
+    (user=%user.name container=%container.name
+     binary=%proc.name command=%proc.cmdline pid=%proc.pid)
+  priority: WARNING
+  tags: [privilege_escalation, suid]
+
+- rule: Setuid or Setgid Bit Set
+  desc: Detects attempts to set SUID/SGID bits on files
+  condition: >
+    spawned_process and container and
+    proc.name = "chmod" and
+    (proc.args contains "u+s" or proc.args contains "g+s" or
+     proc.args contains "4" or proc.args contains "2")
+  output: >
+    SUID/SGID bit being set in container
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: WARNING
+  tags: [privilege_escalation, persistence]
+
+- rule: Capability Manipulation
+  desc: Detects attempts to add capabilities to processes
+  condition: >
+    spawned_process and container and
+    (proc.name in (capsh, setcap, getcap) or
+     proc.args contains "cap_sys_admin" or
+     proc.args contains "cap_sys_ptrace")
+  output: >
+    Capability manipulation detected
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: WARNING
+  tags: [privilege_escalation, capabilities]
+
+- rule: Process Running as Root
+  desc: Detects processes running as root in containers (should run as non-root)
+  condition: >
+    spawned_process and container and
+    user.uid = 0 and
+    not proc.name in (falco, runc, containerd-shim, pause)
+  output: >
+    Process running as root in container
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: WARNING
+  tags: [privilege_escalation, root_process]
+
+- rule: Service Account Token Access
+  desc: Detects unusual access to Kubernetes service account tokens
+  condition: >
+    open_read and container and
+    fd.name contains "/var/run/secrets/kubernetes.io/serviceaccount/token" and
+    not proc.name in (kubectl, kubelet, kube-proxy)
+  output: >
+    Service account token accessed by unusual process
+    (user=%user.name container=%container.name
+     process=%proc.name command=%proc.cmdline pid=%proc.pid)
+  priority: WARNING
+  tags: [privilege_escalation, credential_access]
+
+- rule: Suspicious Kubectl Execution
+  desc: Detects kubectl execution inside containers (potential cluster access)
+  condition: >
+    spawned_process and container and
+    proc.name = "kubectl"
+  output: >
+    kubectl executed inside container
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: WARNING
+  tags: [privilege_escalation, kubectl]
+
+- rule: Exploitation Framework Detected
+  desc: Detects common exploitation frameworks (Metasploit, Empire, etc.)
+  condition: >
+    spawned_process and container and
+    (proc.cmdline contains "metasploit" or
+     proc.cmdline contains "msfvenom" or
+     proc.cmdline contains "meterpreter" or
+     proc.cmdline contains "empire" or
+     proc.cmdline contains "powersploit")
+  output: >
+    Exploitation framework detected in container
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: CRITICAL
+  tags: [privilege_escalation, exploit]
+
+- rule: Linux Privilege Escalation Scripts
+  desc: Detects common Linux privilege escalation enumeration scripts
+  condition: >
+    spawned_process and container and
+    (proc.cmdline contains "linpeas" or
+     proc.cmdline contains "linenum" or
+     proc.cmdline contains "linux-exploit-suggester" or
+     proc.cmdline contains "unix-privesc-check")
+  output: >
+    Privilege escalation enumeration script detected
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: WARNING
+  tags: [privilege_escalation, enumeration]
+
+- rule: Suspicious LD_PRELOAD Usage
+  desc: Detects LD_PRELOAD usage which can be used for privilege escalation
+  condition: >
+    spawned_process and container and
+    proc.env contains "LD_PRELOAD"
+  output: >
+    Suspicious LD_PRELOAD usage detected
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: WARNING
+  tags: [privilege_escalation, defense_evasion]

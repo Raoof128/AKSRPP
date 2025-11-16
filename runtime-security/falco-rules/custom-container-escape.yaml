@@ -1,0 +1,140 @@
+# Custom Falco Rules: Container Escape Detection
+# Detects various container breakout techniques
+
+- rule: Container Escape via Proc Filesystem
+  desc: >
+    Detects attempts to escape container via /proc filesystem manipulation.
+    Attackers may write to /proc/sys/kernel to disable security features.
+  condition: >
+    open_write and container and
+    (fd.name startswith "/proc/sys/kernel" or
+     fd.name startswith "/proc/sys/vm" or
+     fd.name = "/proc/sys/kernel/core_pattern" or
+     fd.name = "/proc/sys/kernel/modprobe")
+  output: >
+    Container escape attempt via proc filesystem
+    (user=%user.name container=%container.name
+     file=%fd.name command=%proc.cmdline pid=%proc.pid)
+  priority: CRITICAL
+  tags: [container_escape, mitre_privilege_escalation]
+
+- rule: Container Escape via Cgroup Release Agent
+  desc: >
+    Detects manipulation of cgroup release_agent for container escape.
+    This is a common technique used in CVE-2022-0492 and similar exploits.
+  condition: >
+    open_write and container and
+    fd.name contains "release_agent"
+  output: >
+    Container escape via cgroup release_agent manipulation
+    (user=%user.name container=%container.name
+     file=%fd.name command=%proc.cmdline pid=%proc.pid)
+  priority: CRITICAL
+  tags: [container_escape, cve_2022_0492]
+
+- rule: Container Escape via Device Mount
+  desc: Detects attempts to mount host devices inside container
+  condition: >
+    spawned_process and container and
+    (proc.name = "mount" or proc.name = "umount") and
+    (proc.args contains "/dev/sda" or
+     proc.args contains "/dev/vda" or
+     proc.args contains "/dev/xvda" or
+     proc.args contains "/dev/nvme")
+  output: >
+    Container trying to mount host device
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: CRITICAL
+  tags: [container_escape, persistence]
+
+- rule: Container Escape via Docker Socket
+  desc: Detects access to Docker socket from inside container
+  condition: >
+    open_read and container and
+    fd.name = "/var/run/docker.sock"
+  output: >
+    Container accessing Docker socket (container escape risk)
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: CRITICAL
+  tags: [container_escape, docker_socket]
+
+- rule: Container Escape via Containerd Socket
+  desc: Detects access to containerd socket from inside container
+  condition: >
+    open_read and container and
+    (fd.name = "/run/containerd/containerd.sock" or
+     fd.name = "/var/run/containerd/containerd.sock")
+  output: >
+    Container accessing containerd socket (container escape risk)
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: CRITICAL
+  tags: [container_escape, containerd_socket]
+
+- rule: Container Escape via Kernel Module Loading
+  desc: Detects kernel module loading from container
+  condition: >
+    spawned_process and container and
+    (proc.name in (insmod, modprobe, kmod) or
+     (proc.name = "bash" and proc.args contains "insmod"))
+  output: >
+    Kernel module loading attempt from container
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: CRITICAL
+  tags: [container_escape, kernel_module]
+
+- rule: Container Escape via Debugfs
+  desc: Detects mounting or accessing debugfs from container
+  condition: >
+    (spawned_process and container and
+     proc.name = "mount" and proc.args contains "debugfs") or
+    (open_read and container and fd.name startswith "/sys/kernel/debug")
+  output: >
+    Debugfs access from container (escape risk)
+    (user=%user.name container=%container.name
+     command=%proc.cmdline file=%fd.name pid=%proc.pid)
+  priority: WARNING
+  tags: [container_escape, debugfs]
+
+- rule: Container Escape via Namespace Manipulation
+  desc: Detects attempts to manipulate namespaces (nsenter, unshare)
+  condition: >
+    spawned_process and container and
+    proc.name in (nsenter, unshare, setns)
+  output: >
+    Namespace manipulation from container
+    (user=%user.name container=%container.name
+     command=%proc.cmdline pid=%proc.pid)
+  priority: CRITICAL
+  tags: [container_escape, namespace]
+
+- rule: Container Accessing Host Filesystem
+  desc: Detects containers accessing host filesystem via /host mount
+  condition: >
+    (open_read or open_write) and container and
+    (fd.name startswith "/host/etc" or
+     fd.name startswith "/host/root" or
+     fd.name startswith "/host/var" or
+     fd.name startswith "/hostfs")
+  output: >
+    Container accessing host filesystem
+    (user=%user.name container=%container.name
+     file=%fd.name command=%proc.cmdline pid=%proc.pid)
+  priority: WARNING
+  tags: [container_escape, host_access]
+
+- rule: Sensitive File Access from Container
+  desc: Container attempting to access sensitive host files
+  condition: >
+    open_read and container and
+    (fd.name in (/etc/shadow, /etc/sudoers, /etc/pam.d/sudo,
+                  /etc/ssh/sshd_config, /root/.ssh/authorized_keys))
+  output: >
+    Container accessing sensitive host file
+    (user=%user.name container=%container.name
+     file=%fd.name command=%proc.cmdline pid=%proc.pid)
+  priority: CRITICAL
+  tags: [credential_access, container_escape]

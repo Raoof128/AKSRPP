@@ -1,0 +1,178 @@
+# Falco Helm Chart Values
+# Production-grade runtime security configuration
+
+# Container image
+image:
+  registry: docker.io
+  repository: falcosecurity/falco-no-driver
+  tag: "0.36.2"
+  pullPolicy: IfNotPresent
+
+# Driver configuration (use modern eBPF instead of kernel module)
+driver:
+  enabled: true
+  kind: ebpf  # Use eBPF for better compatibility
+
+# Resource configuration
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1024Mi
+
+# Enable various features
+tty: true
+docker:
+  enabled: false  # Not using Docker socket
+containerd:
+  enabled: true
+  socket: /run/containerd/containerd.sock
+
+# Priority for syscalls
+priority: debug
+
+# Custom rules location
+customRules:
+  custom-rules.yaml: |-
+    # Custom rules loaded from ConfigMap
+
+# Falco configuration
+falco:
+  # Rule files to load (in order)
+  rules_file:
+    - /etc/falco/falco_rules.yaml
+    - /etc/falco/falco_rules.local.yaml
+    - /etc/falco/rules.d
+
+  # JSON output for structured logging
+  json_output: true
+  json_include_output_property: true
+  json_include_tags_property: true
+
+  # Log outputs
+  log_stderr: true
+  log_syslog: false
+  log_level: info
+
+  # Rate limiting to prevent alert storms
+  outputs:
+    rate: 1
+    max_burst: 1000
+
+  # Syscall event drop monitoring
+  syscall_event_drops:
+    actions:
+      - log
+      - alert
+    rate: 0.03333
+    max_burst: 10
+
+  # Metrics
+  metrics:
+    enabled: true
+    interval: 1h
+    output_rule: true
+    resource_utilization_enabled: true
+
+  # gRPC output for integrations
+  grpc:
+    enabled: true
+    bind_address: "unix:///var/run/falco/falco.sock"
+    threadiness: 0
+
+  grpc_output:
+    enabled: true
+
+# Falcosidekick integration for alert routing
+falcosidekick:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: falcosecurity/falcosidekick
+    tag: "2.28.0"
+
+  # Webhook outputs
+  config:
+    slack:
+      webhookurl: ""  # Set via environment variable
+      minimumpriority: "warning"
+      messageformat: "long"
+
+    webhook:
+      address: "http://security-operator.security.svc.cluster.local:8080/alerts"
+      minimumpriority: "warning"
+
+    elasticsearch:
+      hostport: ""  # Set if using ELK
+      index: "falco-alerts"
+      minimumpriority: "warning"
+
+    loki:
+      hostport: ""  # Set if using Loki
+      minimumpriority: "debug"
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# DaemonSet configuration
+daemonset:
+  updateStrategy:
+    type: RollingUpdate
+
+  # Pod security context
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    fsGroup: 65534
+
+  # Tolerations to run on all nodes
+  tolerations:
+    - effect: NoSchedule
+      key: node-role.kubernetes.io/master
+    - effect: NoSchedule
+      key: node-role.kubernetes.io/control-plane
+
+# Service account
+serviceAccount:
+  create: true
+  name: falco
+
+# RBAC
+rbac:
+  create: true
+
+# Host paths for container runtime
+mounts:
+  enforceProcMount: false
+  volumes:
+    - name: containerd-socket
+      hostPath:
+        path: /run/containerd/containerd.sock
+  volumeMounts:
+    - name: containerd-socket
+      mountPath: /run/containerd/containerd.sock
+
+# Extra environment variables
+extraEnvVars:
+  - name: FALCO_GRPC_ENABLED
+    value: "true"
+  - name: FALCO_GRPC_BIND_ADDRESS
+    value: "unix:///var/run/falco/falco.sock"
+
+# Pod labels
+podLabels:
+  app: falco
+  component: runtime-security
+
+# Node selector (optional - for dedicated security nodes)
+nodeSelector: {}
+
+# Affinity rules
+affinity: {}
